@@ -19,8 +19,6 @@
 9. [更换量化等级](#9-更换量化等级)
 10. [bench.sh 测速脚本](#10-benchsh-测速脚本)
 11. [常见问题](#11-常见问题)
-12. [目录结构](#12-目录结构)
-13. [致谢](#13-致谢)
 
 ---
 
@@ -30,23 +28,15 @@
 |---|---|
 | 模型 | Qwen3.6-35B-A3B（MoE，激活 3B） |
 | 量化 | `Qwen3.6-35B-A3B-UD-IQ3_S.gguf`（13.7 GB） |
-| 多模态 | `mmproj-F16.gguf`（858 MB），支持图片输入 |
+| 多模态 | `mmproj-F16.gguf`（858 MB） |
 | 推理引擎 | llama.cpp `b9542`（含 libmtmd 多模态支持） |
 | 上下文 | 256K（KV cache 量化 q8_0，存 CPU 内存） |
-| 端口 | `8080`（OpenAI 兼容 API） |
-| GPU 显存 | **15.4 G / 16 G**（RTX 4080 实测） |
-| 推理速度 | predict **32–49 t/s**（视 prompt 长度） |
 
 ---
 
 ## 2. 硬件要求
 
-**已验证配置**：
-
-- GPU：NVIDIA RTX 4080 16G（Ada Lovelace, sm_89）
-- CPU：i5-13600KF（20 线程，server 用 10 线程）
-- 内存：32 GB（KV cache 占 ~2.5 GB）
-- CUDA：12.8.1（builder） + 12.8.1（runtime）
+**已验证配置**：i5-13600KF（20 线程）+ RTX 4080 16G + 32 GB DDR5 + CUDA 12.8.1（builder/runtime）。
 
 **换 GPU**：修改 `.env` 里的 `CUDA_ARCHITECTURES`：
 
@@ -66,39 +56,20 @@
 
 ### 3.1 Docker + Compose
 
-```bash
-docker --version          # >= 24.0
-docker compose version    # v2
-```
+要求 `docker >= 24.0` 且 compose v2（`docker compose version` 可查）。
 
 ### 3.2 NVIDIA Container Toolkit
 
+按 [官方指南](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) 安装 `nvidia-container-toolkit`，然后：
+
 ```bash
-# Ubuntu/Debian（详细见 https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html）
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
-  | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-
-curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
-  | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
-  | sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
-
-sudo apt-get update
-sudo apt-get install -y nvidia-container-toolkit
 sudo nvidia-ctk runtime configure --runtime=docker
 sudo systemctl restart docker
 ```
 
-### 3.3 CDI 配置（关键！WSL2 尤其需要）
+### 3.3 CDI 配置
 
-```bash
-# 生成 CDI spec
-sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
-
-# 验证 GPU 可见
-docker run --rm --gpus all nvidia/cuda:12.8.1-base-ubuntu22.04 nvidia-smi
-```
-
-> WSL2 用户：系统自带 spec 可能引用错误驱动路径，**必须**重新生成。详见 §11.2。
+CDI spec 生成与 WSL2 注意事项见 §11.2。
 
 ---
 
@@ -129,21 +100,7 @@ docker compose logs -f
 # 看到 "server is listening on http://0.0.0.0:8080" 即成功
 ```
 
-冒烟测试：
-
-```bash
-curl http://localhost:8080/health
-# {"status":"ok"}
-
-curl -X POST http://localhost:8080/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model":"qwen",
-    "messages":[{"role":"user","content":"一个汉字回答：天空是什么颜色"}],
-    "max_tokens":64,
-    "chat_template_kwargs":{"enable_thinking":false}
-  }'
-```
+启动后参考 §7 验证服务（health 检查，或用任意 OpenAI 客户端连 `http://localhost:8080/v1`）。
 
 ---
 
@@ -187,12 +144,20 @@ pip install -U modelscope 'huggingface_hub[cli]'
 | `MODEL_FILE` | `Qwen3.6-35B-A3B-UD-IQ3_S.gguf` | 主模型文件名 |
 | `MMPROJ_FILE` | `mmproj-F16.gguf` | 多模态投影文件名 |
 | `LOAD_MMPROJ` | `true` | `false` 可省 ~0.9 G 显存，纯文本场景用 |
-| `CONTEXT_SIZE` | `256000` | 上下文长度。OOM 时降到 `131072` 或 `65536` |
+| `CONTEXT_SIZE` | `256000` | 上下文长度。OOM 处理见 §11.5 |
 | `EXTRA_ARGS` | （空） | 透传给 llama-server 的额外参数（如 `--temp 0.7 --top-p 0.8`） |
 
 ---
 
 ## 7. API 使用示例
+
+本服务暴露的 `POST /v1/chat/completions` 端点**完全兼容 OpenAI Chat Completions 规范**，可直接对接：
+
+- **OpenAI 官方 SDK**：Python `openai` 包、Node.js `openai` 包，把 `base_url` 指到 `http://localhost:8080/v1`、`api_key` 任意非空值即可
+- **第三方客户端**：Cherry Studio / Lobe Chat / NextChat / Cline / Open WebUI 等所有支持 custom OpenAI endpoint 的工具
+- **多模态图片输入**：走标准 OpenAI Vision API 格式（`content` 数组中 `image_url` + `text`），无需任何特殊适配
+
+> 仅 `chat_template_kwargs.enable_thinking`（见 §7.2）是 llama.cpp 的扩展字段。
 
 ### 7.1 健康检查
 
@@ -201,22 +166,19 @@ curl http://localhost:8080/health
 # {"status":"ok"}
 ```
 
-### 7.2 文本对话（关闭 thinking，纯文本回答）
+### 7.2 enable_thinking 参数说明
 
-```bash
-curl -X POST http://localhost:8080/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "model": "qwen",
-    "messages": [
-      {"role": "user", "content": "用三句话解释光合作用"}
-    ],
-    "max_tokens": 256,
-    "chat_template_kwargs": {"enable_thinking": false}
-  }'
-```
+Qwen3.6 支持推理模式（思考过程），通过 request body 里的 `chat_template_kwargs.enable_thinking` 字段控制，**关闭时**直接回答，**开启时**先输出思考再产出最终答案。
 
-### 7.3 文本对话（开启 thinking，复杂推理）
+**字段说明**：
+
+| 位置 | 字段 | 说明 |
+|---|---|---|
+| request | `chat_template_kwargs.enable_thinking` | `true` 开启思考；`false` 关闭（默认行为视调用方而定） |
+| response | `message.reasoning_content` | 思考过程文本（仅 `enable_thinking=true` 时返回） |
+| response | `message.content` | 最终答案 |
+
+**示例（开启 thinking）**：
 
 ```bash
 curl -X POST http://localhost:8080/v1/chat/completions \
@@ -232,31 +194,7 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 # 返回里 message.reasoning_content 是思考过程，message.content 是最终答案
 ```
 
-> `entrypoint.sh` 默认 `--reasoning-budget 0`（即不强制思考 token 上限），由调用方按场景决定开/关。
-
-### 7.4 多模态（图片输入）
-
-```bash
-# 准备一张图片，base64 编码
-IMG=$(base64 -w0 photo.jpg)
-
-curl -X POST http://localhost:8080/v1/chat/completions \
-  -H 'Content-Type: application/json' \
-  -d "{
-    \"model\": \"qwen\",
-    \"messages\": [{
-      \"role\": \"user\",
-      \"content\": [
-        {\"type\": \"image_url\", \"image_url\": {\"url\": \"data:image/jpeg;base64,${IMG}\"}},
-        {\"type\": \"text\", \"text\": \"描述这张图片\"}
-      ]
-    }],
-    \"max_tokens\": 512,
-    \"chat_template_kwargs\": {\"enable_thinking\": false}
-  }"
-```
-
-> mmproj 在容器启动时已加载（日志可见 `loaded multimodal model`）。如不需图片功能，设 `LOAD_MMPROJ=false` 省 ~0.9 G 显存。
+> `entrypoint.sh` 启动时使用 `--reasoning-budget 0`（即不强制思考 token 上限），由调用方按场景决定开/关。
 
 ---
 
@@ -271,12 +209,6 @@ curl -X POST http://localhost:8080/v1/chat/completions \
 | 短 (10 / 64)            |       60.6 |       **49.2** |          2 |
 | 中 (20 / 256)           |       81.2 |       **33.1** |         77 |
 | 长 (~200 / 512)         |      186.1 |       **32.8** |         58 |
-
-显存占用：
-
-```
-NVIDIA GeForce RTX 4080, 15515 MiB / 16376 MiB used, util 40%
-```
 
 **资源预算**：
 
@@ -312,12 +244,6 @@ docker compose down && docker compose up -d
 | Q5_K_S | `...-UD-Q5_K_S.gguf` | ~20 GB | ~22 GB | 24G 卡勉强 |
 | Q8_0 | `...-UD-Q8_0.gguf` | ~33 GB | ~35 GB | 48G+ 卡 |
 
-下载新量化：
-
-```bash
-MODEL_FILE=Qwen3.6-35B-A3B-UD-Q4_K_M.gguf ./download-model.sh
-```
-
 ---
 
 ## 10. bench.sh 测速脚本
@@ -330,23 +256,7 @@ ENDPOINT=http://192.168.1.10:8080 ./bench.sh
 RUNS=5 ./bench.sh                         # 每场景跑 5 次
 ```
 
-输出（直接可粘贴到 issue / 报告）：
-
-```markdown
-## Bench Results
-
-| 场景 (in_tok / max_out) | prompt t/s | predict t/s | 实际 tok/run |
-|---|---:|---:|---:|
-| 短 (10 / 64)            |       60.6 |       49.2 |          2 |
-| 中 (20 / 256)           |       81.2 |       33.1 |         77 |
-| 长 (~200 / 512)         |      186.1 |       32.8 |         58 |
-
-## VRAM
-
-NVIDIA GeForce RTX 4080, 15515 MiB, 16376 MiB, 40 %
-```
-
-依赖：`curl` + `python3`（用于 JSON 解析）。
+依赖：`curl` + `python3`（用于 JSON 解析）。输出示例见 §8。
 
 ---
 
@@ -362,13 +272,6 @@ HTTP_PROXY=http://127.0.0.1:7890 \
 HTTPS_PROXY=http://127.0.0.1:7890 \
 git clone --depth 1 --branch b9542 \
     https://github.com/ggml-org/llama.cpp.git llama.cpp-src
-```
-
-或者把已下载的源码拷过来（不带 `.git`）：
-
-```bash
-cp -r /tmp/llama.cpp llama.cpp-src
-rm -rf llama.cpp-src/.git
 ```
 
 ### 11.2 WSL2 下 `docker run --gpus all` 报 GPU 找不到
@@ -415,55 +318,14 @@ ls -lh "${MODEL_HOST_DIR}/${MMPROJ_FILE}"
 2. `CONTEXT_SIZE=131072`（128K，KV cache 减半）
 3. 换更小量化（见 §9）
 
-### 11.6 llama.cpp 源码如何准备
-
-Dockerfile 第 44 行 `COPY llama.cpp-src/ /src/` 把宿主机的 `llama.cpp-src/` 整个拷进 builder。**不会在容器内联网**，所以必须先在宿主机 clone 好。
-
-升级版本：
+### 11.6 升级 llama.cpp 版本
 
 ```bash
-# 改 .env 的 LLAMA_CPP_REF
-$EDITOR .env                # 例如 LLAMA_CPP_REF=b5331
-
-# 更新源码
+# 改 .env 的 LLAMA_CPP_REF（例如 b5331）
 rm -rf llama.cpp-src
 git clone --depth 1 --branch "$(grep ^LLAMA_CPP_REF .env | cut -d= -f2)" \
     https://github.com/ggml-org/llama.cpp.git llama.cpp-src
-
-# 重建（必须 --no-cache，否则 builder 层不刷新）
-docker compose build --no-cache
-docker compose up -d
+docker compose build --no-cache && docker compose up -d
 ```
 
----
-
-## 12. 目录结构
-
-```
-qwen3.6-35b-a3b/
-├── .dockerignore              # build context 排除（.git/.env/*.md 等）
-├── .env                       # 配置（团队复现时改这里）
-├── Dockerfile                 # 多阶段：builder (CUDA devel) + runtime
-├── docker-compose.yml         # 编排，CDI GPU 声明
-├── entrypoint.sh              # llama-server 启动脚本
-├── download-model.sh          # 模型下载（modelscope/hf-mirror）
-├── bench.sh                   # 推理速度基准
-├── deploy-qwen3.6-35b-a3b.md  # 原始部署笔记
-├── PLAN.md                    # 执行计划与决策记录
-├── README.md                  # 本文件
-└── llama.cpp-src/             # llama.cpp 源码（builder COPY 进去）
-
-# 模型在宿主机另一个目录（默认）：
-/home/ns/models/Qwen3.6-35B-A3B/
-├── Qwen3.6-35B-A3B-UD-IQ3_S.gguf   (~13 GB)
-└── mmproj-F16.gguf                  (~858 MB)
-```
-
----
-
-## 13. 致谢
-
-- [Qwen Team](https://qwenlm.github.io/) —— Qwen3.6-35B-A3B 原始模型
-- [unsloth](https://huggingface.co/unsloth) —— GGUF 量化包（IQ3_S / Q4_K_M 等）
-- [llama.cpp](https://github.com/ggml-org/llama.cpp) —— 推理引擎，特别感谢 `b9542` 重新引入 `--mmproj` 多模态支持
-- [modelscope](https://modelscope.cn) —— 国内 CDN 下载加速
+> 必须用 `--no-cache`，否则 builder 层不会刷新。
