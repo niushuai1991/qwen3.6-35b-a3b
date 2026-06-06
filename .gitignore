@@ -1,0 +1,4 @@
+.env
+llama.cpp-src/
+*.log
+/models/
