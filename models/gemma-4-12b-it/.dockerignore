@@ -1,0 +1,6 @@
+.git
+.gitignore
+*.md
+.env
+*.log
+download-model.sh

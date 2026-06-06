@@ -1,0 +1,50 @@
+services:
+  gemma-4-12b-it:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        LLAMA_CPP_REF: ${LLAMA_CPP_REF:-b9542}
+        CUDA_ARCHITECTURES: ${CUDA_ARCHITECTURES:-89}
+    image: gemma-4-12b-it:latest
+    container_name: gemma-4-12b-it
+    restart: unless-stopped
+
+    ports:
+      - "${PORT:-8080}:8080"
+
+    volumes:
+      # 模型目录只读挂载
+      - ${MODEL_HOST_DIR:-/path/to/your/models/gemma-4-12b-it}:/models:ro
+
+    environment:
+      MODEL_DIR: /models
+      MODEL_FILE: ${MODEL_FILE:-gemma-4-12b-it-Q4_K_M.gguf}
+      MMPROJ_FILE: ${MMPROJ_FILE:-mmproj-F16.gguf}
+      LOAD_MMPROJ: ${LOAD_MMPROJ:-true}
+      CONTEXT_SIZE: ${CONTEXT_SIZE:-256000}
+      PORT: "8080"
+      EXTRA_ARGS: ${EXTRA_ARGS:-}
+
+    # GPU 声明：通过 CDI（nvidia-ctk cdi generate 生成的 /etc/cdi/nvidia.yaml）
+    # 已验证 `docker run --gpus all` 可正常访问 GPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              count: all
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
