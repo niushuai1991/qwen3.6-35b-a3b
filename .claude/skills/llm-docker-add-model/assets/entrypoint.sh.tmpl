@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# entrypoint.sh - 启动 llama-server 加载 {{MODEL_HUMAN_NAME}}
+#
+# 环境变量（带默认值）：
+#   MODEL_DIR       /models
+#   MODEL_FILE      {{MODEL_FILE}}
+#   MMPROJ_FILE     {{MMPROJ_FILE}}
+#   LOAD_MMPROJ     true | false     是否加载多模态投影
+#   HOST            0.0.0.0
+#   PORT            8080
+#   CONTEXT_SIZE    {{CONTEXT_SIZE}}
+#   EXTRA_ARGS      透传给 llama-server 的额外参数
+
+set -euo pipefail
+
+log() { printf '[entrypoint] %s\n' "$*"; }
+die() { printf '[entrypoint] ERROR: %s\n' "$*" >&2; exit 1; }
+
+MODEL_DIR="${MODEL_DIR:-/models}"
+MODEL_FILE="${MODEL_FILE:-{{MODEL_FILE}}}"
+MMPROJ_FILE="${MMPROJ_FILE:-{{MMPROJ_FILE}}}"
+LOAD_MMPROJ="${LOAD_MMPROJ:-true}"
+HOST="${HOST:-0.0.0.0}"
+PORT="${PORT:-8080}"
+CONTEXT_SIZE="${CONTEXT_SIZE:-{{CONTEXT_SIZE}}}"
+EXTRA_ARGS="${EXTRA_ARGS:-}"
+
+MODEL_PATH="${MODEL_DIR}/${MODEL_FILE}"
+MMPROJ_PATH="${MODEL_DIR}/${MMPROJ_FILE}"
+
+# 文件检查
+[ -f "$MODEL_PATH" ] || die "model file not found: $MODEL_PATH"
+log "model: $MODEL_PATH"
+
+MMPROJ_ARGS=()
+case "${LOAD_MMPROJ,,}" in
+    true|1|yes|on)
+        [ -f "$MMPROJ_PATH" ] || die "LOAD_MMPROJ=${LOAD_MMPROJ} but mmproj not found: $MMPROJ_PATH"
+        MMPROJ_ARGS=(--mmproj "$MMPROJ_PATH")
+        log "mmproj: $MMPROJ_PATH"
+        ;;
+    false|0|no|off)
+        log "mmproj: skipped (LOAD_MMPROJ=${LOAD_MMPROJ})"
+        ;;
+    *)
+        die "invalid LOAD_MMPROJ='${LOAD_MMPROJ}' (expected true|false)"
+        ;;
+esac
+
+log "host=${HOST} port=${PORT} context=${CONTEXT_SIZE}"
+[ -n "$EXTRA_ARGS" ] && log "extra args: ${EXTRA_ARGS}"
+
+# 启动 llama-server（exec 让信号直传）
+# shellcheck disable=SC2086
+exec llama-server \
+    --model "$MODEL_PATH" \
+    "${MMPROJ_ARGS[@]}" \
+    --host "$HOST" \
+    --port "$PORT" \
+    --reasoning-budget 0 \
+    --no-kv-offload \
+    -ctk q8_0 -ctv q8_0 \
+    -c "$CONTEXT_SIZE" \
+    -fa on \
+    $EXTRA_ARGS

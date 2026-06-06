@@ -1,0 +1,50 @@
+services:
+  {{CONTAINER_NAME}}:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        LLAMA_CPP_REF: ${LLAMA_CPP_REF:-{{LLAMA_CPP_REF}}}
+        CUDA_ARCHITECTURES: ${CUDA_ARCHITECTURES:-{{CUDA_ARCHITECTURES}}}
+    image: {{CONTAINER_NAME}}:latest
+    container_name: {{CONTAINER_NAME}}
+    restart: unless-stopped
+
+    ports:
+      - "${PORT:-8080}:8080"
+
+    volumes:
+      # 模型目录只读挂载
+      - ${MODEL_HOST_DIR:-/path/to/your/models/{{MODEL_DIR}}}:/models:ro
+
+    environment:
+      MODEL_DIR: /models
+      MODEL_FILE: ${MODEL_FILE:-{{MODEL_FILE}}}
+      MMPROJ_FILE: ${MMPROJ_FILE:-{{MMPROJ_FILE}}}
+      LOAD_MMPROJ: ${LOAD_MMPROJ:-true}
+      CONTEXT_SIZE: ${CONTEXT_SIZE:-{{CONTEXT_SIZE}}}
+      PORT: "8080"
+      EXTRA_ARGS: ${EXTRA_ARGS:-}
+
+    # GPU 声明：通过 CDI（nvidia-ctk cdi generate 生成的 /etc/cdi/nvidia.yaml）
+    # 已验证 `docker run --gpus all` 可正常访问 GPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              count: all
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 120s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
