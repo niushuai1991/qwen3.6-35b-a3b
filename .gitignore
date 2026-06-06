@@ -1,4 +1,12 @@
+# 本地配置（不提交）
 .env
+
+# llama.cpp 源码（构建期外部 clone 进来）
 llama.cpp-src/
+
+# 日志
 *.log
-/models/
+
+# IDE / 编辑器
+.idea/
+.vscode/
