@@ -12,6 +12,7 @@
 |---|---|---|---|---|---|
 | Qwen3.6-35B-A3B | llama.cpp `b9542` | IQ3_S (~13.7 GB) | ~15.4 GB | ✅ 已验证（RTX 4080 16G，32–49 t/s） | [models/qwen3.6-35b-a3b](./models/qwen3.6-35b-a3b) |
 | Gemma-4-12B-it | llama.cpp `b9542` | Q4_K_M (~7.5 GB) | ~9 GB | ✅ 已验证（RTX 4080 16G，35–43 t/s） | [models/gemma-4-12b-it](./models/gemma-4-12b-it) |
+| all-MiniLM-L6-v2 (F32) | llama.cpp `b9542` | F32 (~90 MB) | <0.5 GB | ⏳ 待验证 | [models/all-minilm-l6-v2-f32](./models/all-minilm-l6-v2-f32) |
 
 > 新增模型时在此追加一行。
 

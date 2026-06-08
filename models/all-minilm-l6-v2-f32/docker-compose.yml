@@ -1,0 +1,48 @@
+services:
+  minilm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        LLAMA_CPP_REF: ${LLAMA_CPP_REF:-b9542}
+        CUDA_ARCHITECTURES: ${CUDA_ARCHITECTURES:-89}
+    image: all-minilm-l6-v2-f32:latest
+    container_name: all-minilm-l6-v2-f32
+    restart: unless-stopped
+
+    ports:
+      - "${PORT:-8080}:8080"
+
+    volumes:
+      # 模型目录只读挂载
+      - ${MODEL_HOST_DIR:-/home/ns/models/all-MiniLM-L6-v2-f32}:/models:ro
+
+    environment:
+      MODEL_DIR: /models
+      MODEL_FILE: ${MODEL_FILE:-all-MiniLM-L6-v2-f32.gguf}
+      CONTEXT_SIZE: ${CONTEXT_SIZE:-256}
+      PORT: "8080"
+      EXTRA_ARGS: ${EXTRA_ARGS:-}
+
+    # GPU 声明：通过 CDI（nvidia-ctk cdi generate 生成的 /etc/cdi/nvidia.yaml）
+    # 已验证 `docker run --gpus all` 可正常访问 GPU
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              count: all
+
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
