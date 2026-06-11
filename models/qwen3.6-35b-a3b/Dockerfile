@@ -13,7 +13,7 @@
 #                     - 多卡混合用分号分隔，如 "89;90"
 #                     - 注意：builder 内 cmake 3.22，不带 "-realtime" 后缀
 
-ARG LLAMA_CPP_REF=b4400
+ARG LLAMA_CPP_REF=b9542
 ARG CUDA_VERSION=12.8.1
 ARG UBUNTU_VERSION=22.04
 ARG CUDA_ARCHITECTURES=89

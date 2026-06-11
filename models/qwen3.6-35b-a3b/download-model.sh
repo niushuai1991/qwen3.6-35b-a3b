@@ -5,7 +5,7 @@
 # 已存在的文件自动跳过，天然支持断点续传
 #
 # 可覆盖的环境变量（默认值与 .env 保持一致）：
-#   TARGET_DIR   /home/ns/models/Qwen3.6-35B-A3B
+#   MODEL_HOST_DIR   /path/to/your/models/Qwen3.6-35B-A3B
 #   MODEL_FILE   Qwen3.6-35B-A3B-UD-IQ3_S.gguf
 #   MMPROJ_FILE  mmproj-F16.gguf
 #   HF_REPO      unsloth/Qwen3.6-35B-A3B-GGUF
@@ -14,12 +14,12 @@
 #
 # 用法：
 #   ./download-model.sh                         # 下载全部
-#   TARGET_DIR=/data/qwen ./download-model.sh   # 改路径
+#   MODEL_HOST_DIR=/data/qwen ./download-model.sh   # 改路径
 #   MODEL_FILE=Qwen3.6-35B-A3B-UD-Q3_K_M.gguf ./download-model.sh  # 换量化
 
 set -euo pipefail
 
-TARGET_DIR="${TARGET_DIR:-/home/ns/models/Qwen3.6-35B-A3B}"
+MODEL_HOST_DIR="${MODEL_HOST_DIR:-/path/to/your/models/Qwen3.6-35B-A3B}"
 MODEL_FILE="${MODEL_FILE:-Qwen3.6-35B-A3B-UD-IQ3_S.gguf}"
 MMPROJ_FILE="${MMPROJ_FILE:-mmproj-F16.gguf}"
 HF_REPO="${HF_REPO:-unsloth/Qwen3.6-35B-A3B-GGUF}"
@@ -56,7 +56,7 @@ try_hf() {
     log "  → HF: ${HF_REPO} / ${file}"
     HF_ENDPOINT="$HF_ENDPOINT" hf download \
         "$HF_REPO" "$file" \
-        --local-dir "$TARGET_DIR"
+        --local-dir "$MODEL_HOST_DIR"
 }
 
 try_ms() {
@@ -67,14 +67,14 @@ try_ms() {
     modelscope download \
         --model "$MS_REPO" \
         "$file" \
-        --local_dir "$TARGET_DIR"
+        --local_dir "$MODEL_HOST_DIR"
 }
 
-mkdir -p "$TARGET_DIR"
+mkdir -p "$MODEL_HOST_DIR"
 
 failed=()
 for f in "${FILES[@]}"; do
-    if [ -f "$TARGET_DIR/$f" ]; then
+    if [ -f "$MODEL_HOST_DIR/$f" ]; then
         log "skip (exists): $f"
         continue
     fi
@@ -94,5 +94,5 @@ if [ "${#failed[@]}" -gt 0 ]; then
     die "failed files: ${failed[*]}"
 fi
 
-log "done. contents of $TARGET_DIR:"
-ls -lh "$TARGET_DIR"
+log "done. contents of $MODEL_HOST_DIR:"
+ls -lh "$MODEL_HOST_DIR"

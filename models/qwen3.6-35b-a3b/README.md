@@ -89,7 +89,7 @@ docker compose logs -f
 
 ```bash
 ./download-model.sh                                 # 默认全部
-TARGET_DIR=/data/qwen ./download-model.sh           # 改下载目录
+MODEL_HOST_DIR=/data/qwen ./download-model.sh      # 改下载目录
 MODEL_FILE=Qwen3.6-35B-A3B-UD-Q4_K_M.gguf \
   ./download-model.sh                               # 换量化
 ```
